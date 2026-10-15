@@ -1,0 +1,134 @@
+from collections import Counter
+from dataclasses import dataclass
+
+from depgraph_gap.domain import (
+    Bom,
+    Comparison,
+    Component,
+    DropReason,
+    DroppedComponent,
+    EcosystemSummary,
+    PackageId,
+    PerSide,
+    Purl,
+    Repository,
+    SharedComponent,
+    UnkeyedComponent,
+    VersionMismatch,
+)
+from depgraph_gap.purl import (
+    identifies_repository_module,
+    is_ignored_for_uncovered_decision,
+    parse_purl,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _BucketedSide:
+    keyed: dict[Purl, Component]
+    unkeyed: tuple[UnkeyedComponent, ...]
+    dropped: tuple[DroppedComponent, ...]
+
+
+def compare(github: Bom, trivy: Bom, repository: Repository) -> Comparison:
+    github_side = _bucket_side(github, repository)
+    trivy_side = _bucket_side(trivy, repository)
+    shared_purls = github_side.keyed.keys() & trivy_side.keyed.keys()
+    return Comparison(
+        shared=tuple(
+            SharedComponent(
+                purl=purl,
+                occurrences=PerSide(
+                    github=github_side.keyed[purl].occurrences,
+                    trivy=trivy_side.keyed[purl].occurrences,
+                ),
+            )
+            for purl in sorted(shared_purls, key=str)
+        ),
+        trivy_only=_only(trivy_side.keyed, shared_purls),
+        github_only=_only(github_side.keyed, shared_purls),
+        unkeyed=PerSide(github=github_side.unkeyed, trivy=trivy_side.unkeyed),
+        dropped=PerSide(github=github_side.dropped, trivy=trivy_side.dropped),
+        input_components=PerSide(github=github.component_count, trivy=trivy.component_count),
+    )
+
+
+def summarize_ecosystems(comparison: Comparison) -> tuple[EcosystemSummary, ...]:
+    shared = Counter(entry.purl.type for entry in comparison.shared)
+    trivy_only = Counter(entry.purl.type for entry in comparison.trivy_only)
+    github_only = Counter(entry.purl.type for entry in comparison.github_only)
+    trivy_only_ignored = Counter(
+        entry.purl.type
+        for entry in comparison.trivy_only
+        if is_ignored_for_uncovered_decision(entry.purl)
+    )
+    summaries = (
+        EcosystemSummary(
+            purl_type=purl_type,
+            shared=shared[purl_type],
+            trivy_only=trivy_only[purl_type],
+            github_only=github_only[purl_type],
+            trivy_only_ignored=trivy_only_ignored[purl_type],
+        )
+        for purl_type in shared.keys() | trivy_only.keys() | github_only.keys()
+    )
+    return tuple(sorted(summaries, key=lambda summary: (not summary.uncovered, summary.purl_type)))
+
+
+def find_version_mismatches(comparison: Comparison) -> tuple[VersionMismatch, ...]:
+    github_versions = _versions_by_package(comparison.github_only)
+    trivy_versions = _versions_by_package(comparison.trivy_only)
+    return tuple(
+        VersionMismatch(
+            package=package,
+            github_versions=github_versions[package],
+            trivy_versions=trivy_versions[package],
+        )
+        for package in sorted(github_versions.keys() & trivy_versions.keys(), key=str)
+    )
+
+
+def has_uncovered_ecosystem(comparison: Comparison) -> bool:
+    return any(summary.uncovered for summary in summarize_ecosystems(comparison))
+
+
+def _bucket_side(bom: Bom, repository: Repository) -> _BucketedSide:
+    keyed: dict[Purl, Component] = {}
+    unkeyed: list[UnkeyedComponent] = []
+    dropped = [DroppedComponent(bom.root, DropReason.ROOT)] if bom.root else []
+    for component in bom.components:
+        purl = parse_purl(component.purl) if component.purl else None
+        if purl is not None and identifies_repository_module(purl, repository):
+            dropped.append(DroppedComponent(component, DropReason.REPOSITORY_MODULE))
+        elif purl is None:
+            unkeyed.append(
+                UnkeyedComponent(
+                    name=component.name,
+                    version=component.version,
+                    kind=component.kind,
+                    raw_purl=component.purl,
+                )
+            )
+        elif purl in keyed:
+            seen = keyed[purl]
+            keyed[purl] = Component(purl, seen.name, seen.version, seen.occurrences + 1)
+        else:
+            keyed[purl] = Component(purl, component.name, component.version, 1)
+    return _BucketedSide(
+        keyed=keyed,
+        unkeyed=tuple(unkeyed),
+        dropped=tuple(dropped),
+    )
+
+
+def _only(keyed: dict[Purl, Component], shared_purls: set[Purl]) -> tuple[Component, ...]:
+    return tuple(keyed[purl] for purl in sorted(keyed.keys() - shared_purls, key=str))
+
+
+def _versions_by_package(
+    components: tuple[Component, ...],
+) -> dict[PackageId, tuple[str | None, ...]]:
+    grouped: dict[PackageId, list[str | None]] = {}
+    for component in components:
+        grouped.setdefault(component.purl.package, []).append(component.purl.version)
+    return {package: tuple(sorted(versions, key=str)) for package, versions in grouped.items()}

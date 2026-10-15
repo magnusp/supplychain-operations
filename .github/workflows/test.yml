@@ -1,0 +1,46 @@
+name: test
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/test.yml"
+      - "mise.toml"
+      - "tools/**"
+
+permissions: {}
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      depgraph-gap: ${{ steps.filter.outputs.depgraph-gap }}
+    steps:
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            depgraph-gap:
+              - ".github/workflows/test.yml"
+              - "mise.toml"
+              - "tools/depgraph-gap/**"
+
+  depgraph-gap:
+    needs: changes
+    if: needs.changes.outputs.depgraph-gap == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: tools/depgraph-gap
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          install_args: python uv
+      - run: uv run pytest
