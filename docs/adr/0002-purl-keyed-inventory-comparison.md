@@ -53,6 +53,11 @@ The tool reports a version mismatch separately.
 A version mismatch never makes an ecosystem uncovered.
 
 An ecosystem is uncovered when Trivy has components of that purl type and GitHub has none.
+One kind of Trivy-only component does not count toward this decision.
+It is the Go standard library, with the purl type `golang` and the exact name `stdlib`.
+Trivy lists it for every Go repository because of `--detection-priority comprehensive`, and GitHub does not.
+The component stays in the trivy-only bucket and in the gap BOM.
+Only the uncovered decision ignores it.
 
 The tool uses the `cyclonedx` binary only to convert SPDX to CycloneDX.
 The comparison runs in Python.
@@ -61,7 +66,9 @@ The prototype evidence is in the "Why the diff is in Python" section of the tool
 ## Consequences
 
 - Every input component is visible in the output. A reader can audit the counts, and the report names the reason for each dropped component.
-- A Go repository without dependencies has no `golang` component after the module drop, except the `stdlib` package that Trivy lists. The tool still flags that repository as uncovered for `golang`.
+- A Go repository without dependencies has no counted `golang` component after the module drop and the `stdlib` exclusion. The tool does not flag it as uncovered. A real Trivy-only `golang` dependency besides `stdlib` still makes `golang` uncovered.
+- The ignored components stay auditable. The `ecosystems` entry in the report has `trivy_only_ignored`, and the summary on stderr shows the count.
+- The repository module rule matches only `github.com/owner/repo`. A repository with another Go module path, such as `bou.ke/monkey` in `bouk/monkey`, shows its own module as trivy-only. The tool flags `golang` as uncovered, which is a false gap. A fix needs `go.mod` parsing.
 - A coverage claim rests on purl types, so a purl that Trivy or GitHub builds differently can look like a gap. The shared bucket exposes these cases.
 - Dropping qualifiers can merge two distinct packages into one entry. The occurrence count shows the merge.
 - The tool trusts the purl that each source emits. It does not look up the package in a registry.

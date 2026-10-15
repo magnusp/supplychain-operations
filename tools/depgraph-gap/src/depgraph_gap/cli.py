@@ -83,8 +83,8 @@ def _parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument(
         "--fail-on-diff",
         action="store_true",
-        help="exit 1 when at least one ecosystem is uncovered "
-        "(Trivy has components of a purl type and GitHub has none)",
+        help="exit 1 when at least one ecosystem is uncovered (Trivy has counted components "
+        "of a purl type and GitHub has none, the Go standard library does not count)",
     )
     return parser.parse_args(argv)
 

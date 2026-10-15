@@ -6,6 +6,8 @@ The tool compares two inventories of one repository at the HEAD commit of the de
 The first inventory is the GitHub dependency graph.
 The second inventory is the output of Trivy.
 If Trivy finds components in an ecosystem and GitHub finds none, the tool flags the ecosystem as **uncovered**.
+The tool does not count the Go `stdlib` package that Trivy lists for every Go repository.
+See [Ignored for the uncovered decision](#ignored-for-the-uncovered-decision).
 
 ## Usage
 
@@ -30,7 +32,7 @@ uv run depgraph-gap owner/repo > report.json
 ### Options
 
 - `--emit-gap-bom PATH` writes a CycloneDX BOM of the components that only Trivy found.
-- `--fail-on-diff` exits with code 1 when the tool flags at least one ecosystem as uncovered. Trivy must have components of that purl type, and GitHub must have none. Other differences do not change the exit code.
+- `--fail-on-diff` exits with code 1 when the tool flags at least one ecosystem as uncovered. Trivy must have at least one counted component of that purl type, and GitHub must have none. Other differences do not change the exit code.
 
 ### Exit codes
 
@@ -48,7 +50,7 @@ The JSON report has these top-level keys, in this order.
 - `repository` is the `owner/repo` string.
 - `run` holds every attempt with the SHA before and after, the drift flag, the drift warning, and the tool versions.
 - `accounting` holds the bucket counts for each side, with the dropped components split by reason.
-- `ecosystems` holds the summary for each purl type, with the `uncovered` flag.
+- `ecosystems` holds the summary for each purl type. Each entry has the `uncovered` flag and `trivy_only_ignored`, the number of Trivy-only components that the tool ignored for the uncovered decision.
 - `uncovered_ecosystems` lists the purl types that are uncovered.
 - `version_mismatches` lists the packages that both sides have with different versions.
 - `packages` holds the detail for every bucket. Each dropped component carries its reason.
@@ -123,6 +125,36 @@ The major-version suffix follows the real data.
 On `ulule/limiter`, Trivy lists the module as `pkg:golang/github.com/ulule/limiter/v3`.
 Go requires this suffix for module versions `v2` and higher, and forbids `/v1`.
 Without the suffix rule, the module of such a repository would stay visible as a trivy-only package.
+
+### Ignored for the uncovered decision
+
+Some Trivy-only components do not count toward the uncovered decision.
+The predicate `is_ignored_for_uncovered_decision` in `purl.py` names them.
+It matches only one package. The purl type is `golang`, the namespace is empty, and the name is exactly `stdlib`.
+For example, `pkg:golang/stdlib@v1.27.2`.
+
+Trivy lists this package for every Go repository, because of `--detection-priority comprehensive`.
+Trivy takes the version from the `go` directive of the repository.
+GitHub does not list it.
+Without the exclusion, a Go repository with no other Trivy-only `golang` component would show `golang` as uncovered.
+
+The exclusion changes only the uncovered decision.
+The component stays in the trivy-only bucket, in the gap BOM, and in the accounting.
+The counts of the buckets do not change.
+
+An ecosystem is uncovered when at least one Trivy-only component counts, and GitHub has no shared or GitHub-only component of that type.
+If a Go repository has a real Trivy-only `golang` dependency besides `stdlib`, the tool still flags `golang`.
+A component named `stdlib` in another ecosystem, such as `pkg:npm/stdlib`, counts.
+A module path such as `example.com/stdlib` also counts.
+
+The exclusion is visible in two places.
+The `ecosystems` entry in the JSON report has `trivy_only_ignored`.
+The summary on stderr adds a note to the ecosystem line.
+For `magnusp/openbao-seal-spire`, the line is this.
+
+```text
+  golang  trivy-only=1  github-only=0  shared=81  (1 trivy-only ignored for the uncovered decision)
+```
 
 ### Lossless invariant
 
@@ -200,7 +232,7 @@ The Python diff keeps the invariant and produces the grouping by purl type, so i
 
 ## Known limits
 
-- Trivy with `--detection-priority comprehensive` also lists the Go `stdlib` package, for example `pkg:golang/stdlib@v1.24.0`. GitHub did not list it on any repository that the prototype checked. A Go repository with no dependencies has no other `golang` component on either side. The tool still flags `golang` as uncovered for such a repository.
+- A repository whose Go module path is not `github.com/owner/repo` shows its own module as trivy-only, and the tool flags `golang` as uncovered. This is a false gap. For example, `bouk/monkey` has the module `bou.ke/monkey`. Trivy lists `pkg:golang/bou.ke/monkey`, and the repository module rule does not match it. GitHub never lists the module of the repository itself. The component is a Trivy self-reference and not a coverage gap. The tool would need to read the `go.mod` file to find the module path. This is a follow-up.
 - Trivy lists a package once for each lockfile that names it. The occurrence count of the same purl can differ between the sides.
 - GitHub builds the SBOM from the default branch. The tool cannot pin the SBOM to a commit. The drift check only detects a branch that moves during the run.
 - The dependency graph of a repository can be disabled. For example, `magnusp/graceful-spring` answered with a 404 on 2026-10-15.
@@ -232,4 +264,4 @@ The default repository is `magnusp/openbao-seal-spire`.
 ## Possible follow-ups
 
 - Add a `renovate.json` coverage check. The check would compare the ecosystems that this tool finds with the managers that the `renovate.json` of the repository enables.
-- Decide how to treat the Go `stdlib` package that Trivy lists. This would remove the false `golang` gap for a repository without dependencies.
+- Read the module path from `go.mod` and drop the Go module of the repository whatever its path. This would remove the false `golang` gap for a repository with a vanity module path, such as `bouk/monkey`.
