@@ -10,7 +10,9 @@ REPOSITORY = Repository(owner="acme", name="widget")
 def test_takes_the_root_from_metadata_and_flattens_nested_components() -> None:
     document = {
         "bomFormat": "CycloneDX",
-        "metadata": {"component": {"type": "application", "name": "https://github.com/acme/widget"}},
+        "metadata": {
+            "component": {"type": "application", "name": "https://github.com/acme/widget"}
+        },
         "components": [
             {"type": "application", "name": "go.mod"},
             {
@@ -42,14 +44,21 @@ def test_finds_the_root_of_a_github_sbom_by_the_repository_purl() -> None:
         "metadata": {},
         "components": [
             {"type": "library", "name": "left-pad", "purl": "pkg:npm/left-pad@1.0.0"},
-            {"type": "library", "name": "com.github.acme/widget", "purl": "pkg:github/Acme/Widget@main"},
+            {
+                "type": "library",
+                "name": "com.github.acme/widget",
+                "purl": "pkg:github/Acme/Widget@main",
+            },
         ],
     }
 
     bom = parse_cyclonedx(document, REPOSITORY)
 
     assert bom.root == BomComponent(
-        name="com.github.acme/widget", version=None, purl="pkg:github/Acme/Widget@main", kind="library"
+        name="com.github.acme/widget",
+        version=None,
+        purl="pkg:github/Acme/Widget@main",
+        kind="library",
     )
     assert [c.name for c in bom.components] == ["left-pad"]
     assert bom.component_count == 2

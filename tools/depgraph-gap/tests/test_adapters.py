@@ -91,7 +91,9 @@ def test_another_gh_failure_is_reported_with_its_stderr() -> None:
 
 
 def test_stops_when_the_conversion_loses_a_component() -> None:
-    tools = ExternalTools(env=TOKEN_ENV, run=FakeBinaries(cyclonedx_components=CYCLONEDX_COMPONENTS[:1]))
+    tools = ExternalTools(
+        env=TOKEN_ENV, run=FakeBinaries(cyclonedx_components=CYCLONEDX_COMPONENTS[:1])
+    )
 
     with pytest.raises(ConversionLoss, match="2 SPDX packages, 1 CycloneDX components"):
         tools.github_bom(REPOSITORY)

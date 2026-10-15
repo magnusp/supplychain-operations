@@ -2,7 +2,12 @@ import dataclasses
 
 import pytest
 
-from depgraph_gap.comparison import compare, disagrees, find_version_mismatches, summarize_ecosystems
+from depgraph_gap.comparison import (
+    compare,
+    disagrees,
+    find_version_mismatches,
+    summarize_ecosystems,
+)
 from depgraph_gap.domain import PackageId, PerSide, Side, SideAccounting
 from depgraph_gap.errors import LosslessInvariantViolation
 from tests.builders import bom, component

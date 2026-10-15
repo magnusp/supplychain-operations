@@ -37,9 +37,7 @@ _INSTALL_HINTS = {
 }
 
 
-def run_subprocess(
-    args: Sequence[str], env: Mapping[str, str]
-) -> subprocess.CompletedProcess[str]:
+def run_subprocess(args: Sequence[str], env: Mapping[str, str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, env=dict(env), capture_output=True, text=True, check=False)
 
 

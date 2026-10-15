@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 
@@ -17,9 +16,6 @@ class PerSide[T]:
 
     def __getitem__(self, side: Side) -> T:
         return self.github if side is Side.GITHUB else self.trivy
-
-    def map[R](self, transform: Callable[[T], R]) -> "PerSide[R]":
-        return PerSide(github=transform(self.github), trivy=transform(self.trivy))
 
 
 @dataclass(frozen=True, slots=True)

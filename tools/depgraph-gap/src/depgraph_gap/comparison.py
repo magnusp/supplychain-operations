@@ -107,9 +107,7 @@ def _bucket_side(bom: Bom) -> _BucketedSide:
 
 
 def _only(keyed: dict[Purl, Component], shared_purls: set[Purl]) -> tuple[Component, ...]:
-    return tuple(
-        keyed[purl] for purl in sorted(keyed.keys() - shared_purls, key=str)
-    )
+    return tuple(keyed[purl] for purl in sorted(keyed.keys() - shared_purls, key=str))
 
 
 def _versions_by_package(

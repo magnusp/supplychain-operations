@@ -3,15 +3,21 @@ import json
 import os
 import re
 import sys
+import uuid
 from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, datetime
+from pathlib import Path
 
 from depgraph_gap.adapters import ExternalTools
-from depgraph_gap.comparison import compare
-from depgraph_gap.domain import Comparison, Repository, Side, ToolVersions
+from depgraph_gap.comparison import compare, disagrees
+from depgraph_gap.domain import Component, Repository, RunRecord, ToolVersions
 from depgraph_gap.errors import DepgraphGapError, InvalidRepository, MissingToken
+from depgraph_gap.gap_bom import build_gap_bom
 from depgraph_gap.pipeline import Sources, collect
+from depgraph_gap.report import build_report, render_summary
 
 EXIT_OK = 0
+EXIT_DIFFERENCE = 1
 EXIT_ERROR = 2
 
 OpenSources = Callable[[Mapping[str, str]], tuple[Sources, ToolVersions]]
@@ -28,13 +34,22 @@ def run(argv: Sequence[str], environ: Mapping[str, str], open_sources: OpenSourc
     try:
         repository = parse_repository(arguments.repository)
         if not environ.get("GITHUB_TOKEN"):
-            raise MissingToken("GITHUB_TOKEN is not set. Export a token that can read the repository.")
-        sources, _tool_versions = open_sources(environ)
+            raise MissingToken(
+                "GITHUB_TOKEN is not set. Export a token that can read the repository."
+            )
+        sources, tool_versions = open_sources(environ)
         collected = collect(repository, sources)
+        record = RunRecord(repository, collected.attempts, tool_versions)
         comparison = compare(collected.github, collected.trivy)
-        print(json.dumps({"accounting": _accounting(comparison)}, indent=2))
+        report = build_report(record, comparison)
+        if arguments.emit_gap_bom:
+            _write_gap_bom(arguments.emit_gap_bom, record, comparison.trivy_only)
+        print(json.dumps(report, indent=2))
+        print(render_summary(report), file=sys.stderr)
+        if arguments.fail_on_diff and disagrees(comparison):
+            return EXIT_DIFFERENCE
         return EXIT_OK
-    except DepgraphGapError as error:
+    except (DepgraphGapError, OSError) as error:
         print(f"depgraph-gap: error: {error}", file=sys.stderr)
         return EXIT_ERROR
 
@@ -55,19 +70,30 @@ def _parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="depgraph-gap",
         description="Compare the GitHub dependency graph with Trivy for one repository.",
+        epilog="Prints the JSON report on stdout and a summary on stderr. "
+        "Exit codes: 0 success, 1 difference found with --fail-on-diff, 2 error.",
     )
     parser.add_argument("repository", help="repository as owner/repo on github.com")
+    parser.add_argument(
+        "--emit-gap-bom",
+        type=Path,
+        metavar="PATH",
+        help="write a CycloneDX BOM of the components that only Trivy found",
+    )
+    parser.add_argument(
+        "--fail-on-diff",
+        action="store_true",
+        help="exit 1 when either side has a component the other side lacks",
+    )
     return parser.parse_args(argv)
 
 
-def _accounting(comparison: Comparison) -> dict[str, dict[str, int]]:
-    return {
-        side.value: {
-            "input": comparison.accounting(side).input_components,
-            "shared": comparison.accounting(side).shared,
-            "only": comparison.accounting(side).only,
-            "unkeyed": comparison.accounting(side).unkeyed,
-            "dropped_root": comparison.accounting(side).dropped_root,
-        }
-        for side in Side
-    }
+def _write_gap_bom(path: Path, record: RunRecord, trivy_only: tuple[Component, ...]) -> None:
+    document = build_gap_bom(
+        repository=record.repository,
+        sha=record.final_attempt.sha_before,
+        components=trivy_only,
+        timestamp=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        serial_number=str(uuid.uuid4()),
+    )
+    path.write_text(json.dumps(document, indent=2) + "\n")
