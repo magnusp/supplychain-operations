@@ -223,6 +223,9 @@ uv run pytest -m live
 
 The test asserts a clean exit and a balanced accounting for each side.
 It asserts no package counts.
+If the SBOM endpoint answers with a 404, the dependency graph of the repository is disabled.
+The test then skips with a message that names the repository.
+Any other failure fails the test.
 To pick another repository, pass `--live-repo owner/repo`.
 The default repository is `magnusp/openbao-seal-spire`.
 
