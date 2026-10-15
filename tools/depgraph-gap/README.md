@@ -30,12 +30,12 @@ uv run depgraph-gap owner/repo > report.json
 ### Options
 
 - `--emit-gap-bom PATH` writes a CycloneDX BOM of the components that only Trivy found.
-- `--fail-on-diff` exits with code 1 when either side has a component that the other side lacks.
+- `--fail-on-diff` exits with code 1 when the tool flags at least one ecosystem as uncovered. Trivy must have components of that purl type, and GitHub must have none. Other differences do not change the exit code.
 
 ### Exit codes
 
-- **0:** The run finished. This is also the code when the sides differ and you did not set `--fail-on-diff`.
-- **1:** The sides differ and you set `--fail-on-diff`.
+- **0:** The run finished. This is also the code when an ecosystem is uncovered and you did not set `--fail-on-diff`.
+- **1:** At least one ecosystem is uncovered and you set `--fail-on-diff`.
 - **2:** An error stopped the run. Examples are a missing tool, an unset `GITHUB_TOKEN`, a disabled dependency graph, or a broken invariant.
 
 If the dependency graph of the repository is disabled, GitHub answers the SBOM request with a 404.

@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from depgraph_gap.adapters import ExternalTools
-from depgraph_gap.comparison import compare, disagrees
+from depgraph_gap.comparison import compare, has_uncovered_ecosystem
 from depgraph_gap.domain import Component, Repository, RunRecord, ToolVersions
 from depgraph_gap.errors import DepgraphGapError, InvalidRepository, MissingToken
 from depgraph_gap.gap_bom import build_gap_bom
@@ -17,7 +17,7 @@ from depgraph_gap.pipeline import Sources, collect
 from depgraph_gap.report import build_report, render_summary
 
 EXIT_OK = 0
-EXIT_DIFFERENCE = 1
+EXIT_UNCOVERED = 1
 EXIT_ERROR = 2
 
 OpenSources = Callable[[Mapping[str, str]], tuple[Sources, ToolVersions]]
@@ -46,8 +46,8 @@ def run(argv: Sequence[str], environ: Mapping[str, str], open_sources: OpenSourc
             _write_gap_bom(arguments.emit_gap_bom, record, comparison.trivy_only)
         print(json.dumps(report, indent=2))
         print(render_summary(report), file=sys.stderr)
-        if arguments.fail_on_diff and disagrees(comparison):
-            return EXIT_DIFFERENCE
+        if arguments.fail_on_diff and has_uncovered_ecosystem(comparison):
+            return EXIT_UNCOVERED
         return EXIT_OK
     except (DepgraphGapError, OSError) as error:
         print(f"depgraph-gap: error: {error}", file=sys.stderr)
@@ -71,7 +71,7 @@ def _parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
         prog="depgraph-gap",
         description="Compare the GitHub dependency graph with Trivy for one repository.",
         epilog="Prints the JSON report on stdout and a summary on stderr. "
-        "Exit codes: 0 success, 1 difference found with --fail-on-diff, 2 error.",
+        "Exit codes: 0 success, 1 uncovered ecosystem found with --fail-on-diff, 2 error.",
     )
     parser.add_argument("repository", help="repository as owner/repo on github.com")
     parser.add_argument(
@@ -83,7 +83,8 @@ def _parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument(
         "--fail-on-diff",
         action="store_true",
-        help="exit 1 when either side has a component the other side lacks",
+        help="exit 1 when at least one ecosystem is uncovered "
+        "(Trivy has components of a purl type and GitHub has none)",
     )
     return parser.parse_args(argv)
 

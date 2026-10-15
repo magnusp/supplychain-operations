@@ -4,7 +4,7 @@ import pytest
 
 from depgraph_gap.comparison import (
     compare,
-    disagrees,
+    has_uncovered_ecosystem,
     find_version_mismatches,
     summarize_ecosystems,
 )
@@ -224,12 +224,23 @@ def test_a_package_that_only_one_side_has_is_not_a_version_mismatch() -> None:
     assert find_version_mismatches(result) == ()
 
 
-def test_disagrees_when_either_side_has_a_keyed_component_the_other_lacks() -> None:
-    same = bom(component("pkg:npm/foo@1"))
+def test_an_ecosystem_that_only_trivy_has_is_uncovered_for_the_fail_decision() -> None:
+    github = bom(component("pkg:npm/foo@1"))
+    trivy = bom(component("pkg:npm/foo@1"), component("pkg:pypi/bar@1"))
 
-    assert disagrees(compare(same, same, WIDGET)) is False
-    assert disagrees(compare(same, bom(), WIDGET)) is True
-    assert disagrees(compare(bom(), same, WIDGET)) is True
+    assert has_uncovered_ecosystem(compare(github, trivy, WIDGET)) is True
+
+
+def test_a_difference_in_a_covered_or_github_only_ecosystem_is_not_uncovered() -> None:
+    covered_but_different = compare(
+        bom(component("pkg:npm/foo@1")), bom(component("pkg:npm/foo@2")), WIDGET
+    )
+    github_only_ecosystem = compare(
+        bom(component("pkg:githubactions/actions/checkout@v4")), bom(), WIDGET
+    )
+
+    assert has_uncovered_ecosystem(covered_but_different) is False
+    assert has_uncovered_ecosystem(github_only_ecosystem) is False
 
 
 def test_every_input_component_lands_in_exactly_one_bucket_per_side() -> None:

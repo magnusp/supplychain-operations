@@ -78,8 +78,8 @@ def find_version_mismatches(comparison: Comparison) -> tuple[VersionMismatch, ..
     )
 
 
-def disagrees(comparison: Comparison) -> bool:
-    return bool(comparison.github_only or comparison.trivy_only)
+def has_uncovered_ecosystem(comparison: Comparison) -> bool:
+    return any(summary.uncovered for summary in summarize_ecosystems(comparison))
 
 
 def _bucket_side(bom: Bom, repository: Repository) -> _BucketedSide:

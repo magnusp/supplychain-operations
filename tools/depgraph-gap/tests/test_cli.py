@@ -12,8 +12,14 @@ VERSIONS = ToolVersions(gh="gh 1", trivy="trivy 1", cyclonedx="cyclonedx 1")
 ENVIRON = {"GITHUB_TOKEN": "t"}
 
 
+GITHUB = bom(component("pkg:npm/foo@1"), root=component("pkg:github/acme/widget@main"))
+
+
 class FakeSources:
-    def __init__(self, trivy: Bom, head_shas: list[str] | None = None) -> None:
+    def __init__(
+        self, trivy: Bom, head_shas: list[str] | None = None, github: Bom = GITHUB
+    ) -> None:
+        self._github = github
         self._trivy = trivy
         self._head_shas = iter(head_shas or [])
 
@@ -21,7 +27,7 @@ class FakeSources:
         return next(self._head_shas, "abc123")
 
     def github_bom(self, repository: Repository) -> Bom:
-        return bom(component("pkg:npm/foo@1"), root=component("pkg:github/acme/widget@main"))
+        return self._github
 
     def trivy_bom(self, repository: Repository, sha: str) -> Bom:
         return self._trivy
@@ -31,8 +37,8 @@ AGREEING = bom(component("pkg:npm/foo@1"))
 DISAGREEING = bom(component("pkg:npm/foo@1"), component("pkg:pypi/bar@1", name="bar", version="1"))
 
 
-def opener(trivy: Bom, head_shas: list[str] | None = None):
-    return lambda environ: (FakeSources(trivy, head_shas), VERSIONS)
+def opener(trivy: Bom, head_shas: list[str] | None = None, github: Bom = GITHUB):
+    return lambda environ: (FakeSources(trivy, head_shas, github), VERSIONS)
 
 
 def test_prints_the_json_report_on_stdout_and_the_summary_on_stderr(capsys) -> None:
@@ -59,13 +65,38 @@ def test_prints_the_json_report_on_stdout_and_the_summary_on_stderr(capsys) -> N
     assert "UNCOVERED pypi" in captured.err
 
 
-def test_a_difference_exits_zero_unless_fail_on_diff_is_set(capsys) -> None:
+def test_an_uncovered_ecosystem_exits_zero_unless_fail_on_diff_is_set(capsys) -> None:
     assert run(["acme/widget"], ENVIRON, opener(DISAGREEING)) == 0
     assert run(["acme/widget", "--fail-on-diff"], ENVIRON, opener(DISAGREEING)) == 1
 
 
 def test_fail_on_diff_exits_zero_when_the_sides_agree(capsys) -> None:
     assert run(["acme/widget", "--fail-on-diff"], ENVIRON, opener(AGREEING)) == 0
+
+
+def test_fail_on_diff_exits_zero_when_only_github_has_an_ecosystem(capsys) -> None:
+    github_with_actions = bom(
+        component("pkg:npm/foo@1"),
+        component("pkg:githubactions/actions/checkout@v4"),
+        root=component("pkg:github/acme/widget@main"),
+    )
+
+    code = run(
+        ["acme/widget", "--fail-on-diff"], ENVIRON, opener(AGREEING, github=github_with_actions)
+    )
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "githubactions  trivy-only=0  github-only=1  shared=0" in captured.err
+    assert "uncovered ecosystems: none" in captured.err
+
+
+def test_fail_on_diff_exits_zero_when_only_versions_differ(capsys) -> None:
+    trivy_with_other_version = bom(component("pkg:npm/foo@2"))
+
+    code = run(["acme/widget", "--fail-on-diff"], ENVIRON, opener(trivy_with_other_version))
+
+    assert code == 0
 
 
 def test_writes_a_gap_bom_of_the_trivy_only_components(tmp_path: Path, capsys) -> None:
