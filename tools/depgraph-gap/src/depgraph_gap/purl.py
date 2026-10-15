@@ -40,6 +40,12 @@ def identifies_repository_module(purl: Purl, repository: Repository) -> bool:
     return re.fullmatch(expected + _GO_MAJOR_VERSION_SUFFIX, module_path) is not None
 
 
+def is_ignored_for_uncovered_decision(purl: Purl) -> bool:
+    # Trivy lists the Go toolchain for every Go repository. GitHub never lists it.
+    is_go_standard_library = purl.package.namespace is None and purl.package.name == "stdlib"
+    return purl.type == "golang" and is_go_standard_library
+
+
 def _split_version(path_and_version: str) -> tuple[str, str | None]:
     at = path_and_version.rfind("@")
     if at > path_and_version.rfind("/"):

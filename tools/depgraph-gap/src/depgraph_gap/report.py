@@ -35,6 +35,7 @@ def build_report(record: RunRecord, comparison: Comparison) -> dict[str, Any]:
                 "trivy_only": summary.trivy_only,
                 "github_only": summary.github_only,
                 "shared": summary.shared,
+                "trivy_only_ignored": summary.trivy_only_ignored,
                 "uncovered": summary.uncovered,
             }
             for summary in ecosystems
@@ -83,11 +84,16 @@ def render_summary(report: dict[str, Any]) -> str:
     lines.append("ecosystems by purl type:")
     for ecosystem in report["ecosystems"]:
         flag = "UNCOVERED " if ecosystem["uncovered"] else ""
+        ignored = ecosystem["trivy_only_ignored"]
+        ignored_note = (
+            f"  ({ignored} trivy-only ignored for the uncovered decision)" if ignored else ""
+        )
         lines.append(
             f"  {flag}{ecosystem['purl_type']}"
             f"  trivy-only={ecosystem['trivy_only']}"
             f"  github-only={ecosystem['github_only']}"
             f"  shared={ecosystem['shared']}"
+            f"{ignored_note}"
         )
     uncovered = report["uncovered_ecosystems"]
     lines.append(f"uncovered ecosystems: {', '.join(uncovered) if uncovered else 'none'}")

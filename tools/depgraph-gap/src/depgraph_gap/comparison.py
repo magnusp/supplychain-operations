@@ -16,7 +16,11 @@ from depgraph_gap.domain import (
     UnkeyedComponent,
     VersionMismatch,
 )
-from depgraph_gap.purl import identifies_repository_module, parse_purl
+from depgraph_gap.purl import (
+    identifies_repository_module,
+    is_ignored_for_uncovered_decision,
+    parse_purl,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,12 +57,18 @@ def summarize_ecosystems(comparison: Comparison) -> tuple[EcosystemSummary, ...]
     shared = Counter(entry.purl.type for entry in comparison.shared)
     trivy_only = Counter(entry.purl.type for entry in comparison.trivy_only)
     github_only = Counter(entry.purl.type for entry in comparison.github_only)
+    trivy_only_ignored = Counter(
+        entry.purl.type
+        for entry in comparison.trivy_only
+        if is_ignored_for_uncovered_decision(entry.purl)
+    )
     summaries = (
         EcosystemSummary(
             purl_type=purl_type,
             shared=shared[purl_type],
             trivy_only=trivy_only[purl_type],
             github_only=github_only[purl_type],
+            trivy_only_ignored=trivy_only_ignored[purl_type],
         )
         for purl_type in shared.keys() | trivy_only.keys() | github_only.keys()
     )

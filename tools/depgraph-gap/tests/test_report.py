@@ -29,9 +29,30 @@ def test_the_report_leads_with_ecosystems_and_keeps_package_detail_underneath() 
 
     assert list(report)[:4] == ["repository", "run", "accounting", "ecosystems"]
     assert report["ecosystems"] == [
-        {"purl_type": "pypi", "trivy_only": 1, "github_only": 0, "shared": 0, "uncovered": True},
-        {"purl_type": "golang", "trivy_only": 0, "github_only": 0, "shared": 1, "uncovered": False},
-        {"purl_type": "npm", "trivy_only": 1, "github_only": 1, "shared": 0, "uncovered": False},
+        {
+            "purl_type": "pypi",
+            "trivy_only": 1,
+            "github_only": 0,
+            "shared": 0,
+            "trivy_only_ignored": 0,
+            "uncovered": True,
+        },
+        {
+            "purl_type": "golang",
+            "trivy_only": 0,
+            "github_only": 0,
+            "shared": 1,
+            "trivy_only_ignored": 0,
+            "uncovered": False,
+        },
+        {
+            "purl_type": "npm",
+            "trivy_only": 1,
+            "github_only": 1,
+            "shared": 0,
+            "trivy_only_ignored": 0,
+            "uncovered": False,
+        },
     ]
     assert report["uncovered_ecosystems"] == ["pypi"]
     assert report["version_mismatches"] == [
@@ -139,3 +160,31 @@ def test_the_summary_flags_uncovered_ecosystems_and_shows_the_accounting() -> No
             "  trivy: 6 in = 1 shared + 2 only + 1 unkeyed + 2 dropped (1 root, 1 repository module)",
         ]
     )
+
+
+def test_the_report_and_summary_show_how_many_trivy_only_components_were_ignored() -> None:
+    github = bom(root=component("pkg:github/acme/widget@main"))
+    trivy = bom(component("pkg:golang/stdlib@v1.24.0", name="stdlib", version="v1.24.0"))
+    record = RunRecord(REPOSITORY, (Attempt("abc", "abc"),), VERSIONS)
+
+    report = build_report(record, compare(github, trivy, REPOSITORY))
+
+    assert report["ecosystems"] == [
+        {
+            "purl_type": "golang",
+            "trivy_only": 1,
+            "github_only": 0,
+            "shared": 0,
+            "trivy_only_ignored": 1,
+            "uncovered": False,
+        }
+    ]
+    assert report["uncovered_ecosystems"] == []
+    assert report["packages"]["trivy_only"] == [
+        {"purl": "pkg:golang/stdlib@v1.24.0", "name": "stdlib", "version": "v1.24.0", "occurrences": 1}
+    ]
+    assert (
+        "  golang  trivy-only=1  github-only=0  shared=0"
+        "  (1 trivy-only ignored for the uncovered decision)"
+    ) in render_summary(report).splitlines()
+    assert "uncovered ecosystems: none" in render_summary(report)

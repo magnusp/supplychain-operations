@@ -164,10 +164,12 @@ class EcosystemSummary:
     shared: int
     trivy_only: int
     github_only: int
+    trivy_only_ignored: int
 
     @property
     def uncovered(self) -> bool:
-        return self.trivy_only > 0 and self.shared == 0 and self.github_only == 0
+        counted_trivy_only = self.trivy_only - self.trivy_only_ignored
+        return counted_trivy_only > 0 and self.shared == 0 and self.github_only == 0
 
 
 @dataclass(frozen=True, slots=True)

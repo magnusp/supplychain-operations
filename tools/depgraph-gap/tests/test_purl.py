@@ -1,6 +1,6 @@
 import pytest
 
-from depgraph_gap.purl import parse_purl
+from depgraph_gap.purl import is_ignored_for_uncovered_decision, parse_purl
 
 
 @pytest.mark.parametrize(
@@ -31,3 +31,22 @@ def test_exposes_type_and_version_of_the_parsed_purl() -> None:
     purl = parse_purl("pkg:Cargo/serde@1.0.200")
 
     assert (purl.type, purl.version) == ("cargo", "1.0.200")
+
+
+@pytest.mark.parametrize(
+    ("raw", "ignored"),
+    [
+        ("pkg:golang/stdlib", True),
+        ("pkg:golang/stdlib@v1.24.0", True),
+        ("pkg:golang/stdlib@go1.25.3", True),
+        ("pkg:npm/stdlib@1.0.0", False),
+        ("pkg:pypi/stdlib@1.0.0", False),
+        ("pkg:golang/example.com/stdlib@v1.0.0", False),
+        ("pkg:golang/stdlib-extra@v1.0.0", False),
+        ("pkg:golang/github.com/acme/widget@v1.0.0", False),
+    ],
+)
+def test_only_the_go_standard_library_is_ignored_for_the_uncovered_decision(
+    raw: str, ignored: bool
+) -> None:
+    assert is_ignored_for_uncovered_decision(parse_purl(raw)) is ignored

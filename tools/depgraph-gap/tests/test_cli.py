@@ -99,6 +99,57 @@ def test_fail_on_diff_exits_zero_when_only_versions_differ(capsys) -> None:
     assert code == 0
 
 
+GO_STDLIB = component("pkg:golang/stdlib@v1.24.0", name="stdlib", version="v1.24.0")
+GO_DEPENDENCY = component("pkg:golang/example.com/lib@v1.0.0", name="lib", version="v1.0.0")
+
+
+def test_fail_on_diff_exits_zero_when_the_only_trivy_only_golang_component_is_stdlib(
+    tmp_path: Path, capsys
+) -> None:
+    trivy = bom(component("pkg:npm/foo@1"), GO_STDLIB)
+    target = tmp_path / "gap.cdx.json"
+
+    code = run(
+        ["acme/widget", "--fail-on-diff", "--emit-gap-bom", str(target)],
+        ENVIRON,
+        opener(trivy),
+    )
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "UNCOVERED" not in captured.err
+    assert (
+        "  golang  trivy-only=1  github-only=0  shared=0"
+        "  (1 trivy-only ignored for the uncovered decision)"
+    ) in captured.err
+    assert [c["purl"] for c in json.loads(target.read_text())["components"]] == [
+        "pkg:golang/stdlib@v1.24.0"
+    ]
+    assert {
+        "purl_type": "golang",
+        "trivy_only": 1,
+        "github_only": 0,
+        "shared": 0,
+        "trivy_only_ignored": 1,
+        "uncovered": False,
+    } in json.loads(captured.out)["ecosystems"]
+
+
+def test_fail_on_diff_exits_one_when_golang_has_a_real_trivy_only_dependency_besides_stdlib(
+    capsys,
+) -> None:
+    trivy = bom(component("pkg:npm/foo@1"), GO_STDLIB, GO_DEPENDENCY)
+
+    code = run(["acme/widget", "--fail-on-diff"], ENVIRON, opener(trivy))
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert (
+        "  UNCOVERED golang  trivy-only=2  github-only=0  shared=0"
+        "  (1 trivy-only ignored for the uncovered decision)"
+    ) in captured.err
+
+
 def test_writes_a_gap_bom_of_the_trivy_only_components(tmp_path: Path, capsys) -> None:
     target = tmp_path / "gap.cdx.json"
 

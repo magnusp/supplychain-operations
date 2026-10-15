@@ -132,6 +132,43 @@ def test_a_go_repository_without_dependencies_is_not_an_uncovered_golang_ecosyst
     assert [entry.name for entry in result.unkeyed.trivy] == ["go.mod"]
 
 
+def test_a_go_repository_whose_only_trivy_only_golang_component_is_stdlib_is_not_uncovered() -> None:
+    github = bom(component("pkg:npm/foo@1"), root=GITHUB_ROOT)
+    trivy = bom(
+        component("pkg:npm/foo@1"),
+        component("pkg:golang/stdlib@v1.24.0", name="stdlib", version="v1.24.0"),
+        root=TRIVY_ROOT,
+    )
+
+    result = compare(github, trivy, WIDGET)
+    golang = next(s for s in summarize_ecosystems(result) if s.purl_type == "golang")
+
+    assert [str(entry.purl) for entry in result.trivy_only] == ["pkg:golang/stdlib@v1.24.0"]
+    assert result.accounting(Side.TRIVY).only == 1
+    assert (golang.trivy_only, golang.trivy_only_ignored, golang.uncovered) == (1, 1, False)
+    assert has_uncovered_ecosystem(result) is False
+
+
+def test_stdlib_next_to_a_real_trivy_only_golang_dependency_is_still_uncovered() -> None:
+    trivy = bom(
+        component("pkg:golang/stdlib@v1.24.0", name="stdlib", version="v1.24.0"),
+        component("pkg:golang/example.com/lib@v1.0.0", name="lib", version="v1.0.0"),
+    )
+
+    result = compare(bom(), trivy, WIDGET)
+    (golang,) = summarize_ecosystems(result)
+
+    assert (golang.trivy_only, golang.trivy_only_ignored, golang.uncovered) == (2, 1, True)
+    assert has_uncovered_ecosystem(result) is True
+
+
+def test_a_component_named_stdlib_in_another_ecosystem_is_not_ignored() -> None:
+    result = compare(bom(), bom(component("pkg:npm/stdlib@1.0.0")), WIDGET)
+    (npm,) = summarize_ecosystems(result)
+
+    assert (npm.trivy_only, npm.trivy_only_ignored, npm.uncovered) == (1, 0, True)
+
+
 def test_does_not_drop_a_repository_purl_that_is_not_the_root() -> None:
     other = component("pkg:github/acme/other@main")
     github = bom(other, root=GITHUB_ROOT)
