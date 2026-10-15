@@ -1,4 +1,6 @@
-from depgraph_gap.domain import Bom, BomComponent
+from depgraph_gap.domain import Bom, BomComponent, Repository
+
+WIDGET = Repository("acme", "widget")
 
 
 def component(

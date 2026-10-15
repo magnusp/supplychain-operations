@@ -41,8 +41,20 @@ def test_prints_the_json_report_on_stdout_and_the_summary_on_stderr(capsys) -> N
     captured = capsys.readouterr()
     assert code == 0
     assert json.loads(captured.out)["accounting"] == {
-        "github": {"input": 2, "shared": 1, "only": 0, "unkeyed": 0, "dropped_root": 1},
-        "trivy": {"input": 2, "shared": 1, "only": 1, "unkeyed": 0, "dropped_root": 0},
+        "github": {
+            "input": 2,
+            "shared": 1,
+            "only": 0,
+            "unkeyed": 0,
+            "dropped": {"root": 1, "repository_module": 0},
+        },
+        "trivy": {
+            "input": 2,
+            "shared": 1,
+            "only": 1,
+            "unkeyed": 0,
+            "dropped": {"root": 0, "repository_module": 0},
+        },
     }
     assert "UNCOVERED pypi" in captured.err
 

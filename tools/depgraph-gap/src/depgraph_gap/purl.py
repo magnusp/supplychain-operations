@@ -1,12 +1,13 @@
 import re
 from urllib.parse import quote, unquote
 
-from depgraph_gap.domain import PackageId, Purl
+from depgraph_gap.domain import PackageId, Purl, Repository
 
 _LOWERCASE_TYPES = frozenset(
     {"bitbucket", "composer", "github", "githubactions", "golang", "npm", "pypi"}
 )
 _PYPI_SEPARATORS = re.compile(r"[-_.]+")
+_GO_MAJOR_VERSION_SUFFIX = r"(?:/v(?:[2-9]|[1-9][0-9]+))?"
 
 
 def parse_purl(text: str) -> Purl | None:
@@ -29,6 +30,14 @@ def parse_purl(text: str) -> Purl | None:
     namespace = "/".join(_encode(segment) for segment in namespace_segments) or None
     package = PackageId(type=purl_type, namespace=namespace, name=_encode(name))
     return Purl(package=package, version=_encode(version) if version else None)
+
+
+def identifies_repository_module(purl: Purl, repository: Repository) -> bool:
+    if purl.type != "golang":
+        return False
+    module_path = "/".join(part for part in (purl.package.namespace, purl.package.name) if part)
+    expected = f"github.com/{re.escape(repository.owner.lower())}/{re.escape(repository.name.lower())}"
+    return re.fullmatch(expected + _GO_MAJOR_VERSION_SUFFIX, module_path) is not None
 
 
 def _split_version(path_and_version: str) -> tuple[str, str | None]:

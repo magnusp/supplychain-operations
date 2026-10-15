@@ -2,9 +2,9 @@ from typing import Any
 
 from depgraph_gap.comparison import find_version_mismatches, summarize_ecosystems
 from depgraph_gap.domain import (
-    BomComponent,
     Comparison,
     Component,
+    DroppedComponent,
     RunRecord,
     Side,
     UnkeyedComponent,
@@ -62,8 +62,8 @@ def build_report(record: RunRecord, comparison: Comparison) -> dict[str, Any]:
             "unkeyed": {
                 side.value: [_unkeyed(entry) for entry in comparison.unkeyed[side]] for side in Side
             },
-            "dropped_root": {
-                side.value: [_root(entry) for entry in comparison.dropped_root[side]]
+            "dropped": {
+                side.value: [_dropped(entry) for entry in comparison.dropped[side]]
                 for side in Side
             },
         },
@@ -97,7 +97,7 @@ def render_summary(report: dict[str, Any]) -> str:
         lines.append(
             f"  {side}: {counts['input']} in = {counts['shared']} shared"
             f" + {counts['only']} only + {counts['unkeyed']} unkeyed"
-            f" + {counts['dropped_root']} dropped root"
+            f" + {sum(counts['dropped'].values())} dropped ({_dropped_breakdown(counts['dropped'])})"
         )
     return "\n".join(lines)
 
@@ -113,14 +113,14 @@ def _drift_warning(record: RunRecord) -> str | None:
     )
 
 
-def _accounting(comparison: Comparison, side: Side) -> dict[str, int]:
+def _accounting(comparison: Comparison, side: Side) -> dict[str, Any]:
     accounting = comparison.accounting(side)
     return {
         "input": accounting.input_components,
         "shared": accounting.shared,
         "only": accounting.only,
         "unkeyed": accounting.unkeyed,
-        "dropped_root": accounting.dropped_root,
+        "dropped": {reason.value: count for reason, count in accounting.dropped.items()},
     }
 
 
@@ -142,10 +142,15 @@ def _unkeyed(component: UnkeyedComponent) -> dict[str, Any]:
     }
 
 
-def _root(component: BomComponent) -> dict[str, Any]:
+def _dropped(entry: DroppedComponent) -> dict[str, Any]:
     return {
-        "name": component.name,
-        "version": component.version,
-        "kind": component.kind,
-        "purl": component.purl,
+        "reason": entry.reason.value,
+        "name": entry.component.name,
+        "version": entry.component.version,
+        "kind": entry.component.kind,
+        "purl": entry.component.purl,
     }
+
+
+def _dropped_breakdown(dropped: dict[str, int]) -> str:
+    return ", ".join(f"{count} {reason.replace('_', ' ')}" for reason, count in dropped.items())

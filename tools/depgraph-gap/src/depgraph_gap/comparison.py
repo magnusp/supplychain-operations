@@ -3,30 +3,32 @@ from dataclasses import dataclass
 
 from depgraph_gap.domain import (
     Bom,
-    BomComponent,
     Comparison,
     Component,
+    DropReason,
+    DroppedComponent,
     EcosystemSummary,
     PackageId,
     PerSide,
     Purl,
+    Repository,
     SharedComponent,
     UnkeyedComponent,
     VersionMismatch,
 )
-from depgraph_gap.purl import parse_purl
+from depgraph_gap.purl import identifies_repository_module, parse_purl
 
 
 @dataclass(frozen=True, slots=True)
 class _BucketedSide:
     keyed: dict[Purl, Component]
     unkeyed: tuple[UnkeyedComponent, ...]
-    dropped_root: tuple[BomComponent, ...]
+    dropped: tuple[DroppedComponent, ...]
 
 
-def compare(github: Bom, trivy: Bom) -> Comparison:
-    github_side = _bucket_side(github)
-    trivy_side = _bucket_side(trivy)
+def compare(github: Bom, trivy: Bom, repository: Repository) -> Comparison:
+    github_side = _bucket_side(github, repository)
+    trivy_side = _bucket_side(trivy, repository)
     shared_purls = github_side.keyed.keys() & trivy_side.keyed.keys()
     return Comparison(
         shared=tuple(
@@ -42,7 +44,7 @@ def compare(github: Bom, trivy: Bom) -> Comparison:
         trivy_only=_only(trivy_side.keyed, shared_purls),
         github_only=_only(github_side.keyed, shared_purls),
         unkeyed=PerSide(github=github_side.unkeyed, trivy=trivy_side.unkeyed),
-        dropped_root=PerSide(github=github_side.dropped_root, trivy=trivy_side.dropped_root),
+        dropped=PerSide(github=github_side.dropped, trivy=trivy_side.dropped),
         input_components=PerSide(github=github.component_count, trivy=trivy.component_count),
     )
 
@@ -80,12 +82,15 @@ def disagrees(comparison: Comparison) -> bool:
     return bool(comparison.github_only or comparison.trivy_only)
 
 
-def _bucket_side(bom: Bom) -> _BucketedSide:
+def _bucket_side(bom: Bom, repository: Repository) -> _BucketedSide:
     keyed: dict[Purl, Component] = {}
     unkeyed: list[UnkeyedComponent] = []
+    dropped = [DroppedComponent(bom.root, DropReason.ROOT)] if bom.root else []
     for component in bom.components:
         purl = parse_purl(component.purl) if component.purl else None
-        if purl is None:
+        if purl is not None and identifies_repository_module(purl, repository):
+            dropped.append(DroppedComponent(component, DropReason.REPOSITORY_MODULE))
+        elif purl is None:
             unkeyed.append(
                 UnkeyedComponent(
                     name=component.name,
@@ -102,7 +107,7 @@ def _bucket_side(bom: Bom) -> _BucketedSide:
     return _BucketedSide(
         keyed=keyed,
         unkeyed=tuple(unkeyed),
-        dropped_root=(bom.root,) if bom.root else (),
+        dropped=tuple(dropped),
     )
 
 

@@ -1,7 +1,7 @@
 from depgraph_gap.comparison import compare
 from depgraph_gap.domain import Repository
 from depgraph_gap.gap_bom import build_gap_bom
-from tests.builders import bom, component
+from tests.builders import WIDGET, bom, component
 
 
 def test_lists_exactly_the_trivy_only_components_with_their_occurrences() -> None:
@@ -17,7 +17,7 @@ def test_lists_exactly_the_trivy_only_components_with_their_occurrences() -> Non
     document = build_gap_bom(
         Repository("acme", "widget"),
         sha="abc123",
-        components=compare(github, trivy).trivy_only,
+        components=compare(github, trivy, WIDGET).trivy_only,
         timestamp="2026-10-15T12:00:00Z",
         serial_number="11111111-2222-3333-4444-555555555555",
     )

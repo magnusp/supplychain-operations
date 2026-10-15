@@ -40,7 +40,7 @@ def run(argv: Sequence[str], environ: Mapping[str, str], open_sources: OpenSourc
         sources, tool_versions = open_sources(environ)
         collected = collect(repository, sources)
         record = RunRecord(repository, collected.attempts, tool_versions)
-        comparison = compare(collected.github, collected.trivy)
+        comparison = compare(collected.github, collected.trivy, repository)
         report = build_report(record, comparison)
         if arguments.emit_gap_bom:
             _write_gap_bom(arguments.emit_gap_bom, record, comparison.trivy_only)

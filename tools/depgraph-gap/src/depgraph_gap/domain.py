@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 
@@ -7,6 +8,11 @@ from depgraph_gap.errors import LosslessInvariantViolation
 class Side(Enum):
     GITHUB = "github"
     TRIVY = "trivy"
+
+
+class DropReason(Enum):
+    ROOT = "root"
+    REPOSITORY_MODULE = "repository_module"
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +96,12 @@ class UnkeyedComponent:
 
 
 @dataclass(frozen=True, slots=True)
+class DroppedComponent:
+    component: BomComponent
+    reason: DropReason
+
+
+@dataclass(frozen=True, slots=True)
 class SharedComponent:
     purl: Purl
     occurrences: PerSide[int]
@@ -101,11 +113,15 @@ class SideAccounting:
     shared: int
     only: int
     unkeyed: int
-    dropped_root: int
+    dropped: Mapping[DropReason, int]
+
+    @property
+    def dropped_total(self) -> int:
+        return sum(self.dropped.values())
 
     @property
     def accounted(self) -> int:
-        return self.shared + self.only + self.unkeyed + self.dropped_root
+        return self.shared + self.only + self.unkeyed + self.dropped_total
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,7 +130,7 @@ class Comparison:
     trivy_only: tuple[Component, ...]
     github_only: tuple[Component, ...]
     unkeyed: PerSide[tuple[UnkeyedComponent, ...]]
-    dropped_root: PerSide[tuple[BomComponent, ...]]
+    dropped: PerSide[tuple[DroppedComponent, ...]]
     input_components: PerSide[int]
 
     def __post_init__(self) -> None:
@@ -125,7 +141,7 @@ class Comparison:
                     f"{side.value} side lost components: "
                     f"{accounting.input_components} in, {accounting.accounted} accounted for "
                     f"({accounting.shared} shared, {accounting.only} only, "
-                    f"{accounting.unkeyed} unkeyed, {accounting.dropped_root} dropped root)"
+                    f"{accounting.unkeyed} unkeyed, {accounting.dropped_total} dropped)"
                 )
 
     def accounting(self, side: Side) -> SideAccounting:
@@ -135,7 +151,10 @@ class Comparison:
             shared=sum(entry.occurrences[side] for entry in self.shared),
             only=sum(entry.occurrences for entry in only),
             unkeyed=len(self.unkeyed[side]),
-            dropped_root=len(self.dropped_root[side]),
+            dropped={
+                reason: sum(1 for entry in self.dropped[side] if entry.reason is reason)
+                for reason in DropReason
+            },
         )
 
 

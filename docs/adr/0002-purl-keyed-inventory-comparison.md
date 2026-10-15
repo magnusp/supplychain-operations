@@ -30,9 +30,17 @@ The tool puts every input component into exactly one bucket.
 - **Trivy-only:** only Trivy has the purl.
 - **GitHub-only:** only GitHub has the purl.
 - **Unkeyed:** the component has no purl, or the purl does not parse. The tool lists these per side and never compares them.
-- **Dropped root:** the component that describes the repository itself. Each side has at most one.
+- **Dropped:** a component that describes the repository itself. Each dropped component has one reason. A side can have more than one dropped component.
+  - **Root:** the root of the BOM. Trivy puts it in `metadata.component`. GitHub lists it as `pkg:github/owner/repo`.
+  - **Repository module:** the Go module of the scanned repository. Trivy lists it as a component without a version.
 
 The tool drops no other component.
+A component is the repository module when its purl type is `golang` and its module path is `github.com/owner/repo`.
+The comparison of owner and repository name is case-insensitive.
+The path can end with a major-version suffix of `/v2` or higher.
+Trivy emits this suffix for modules such as `github.com/ulule/limiter/v3`.
+The version of the purl does not matter.
+The rule applies to both sides.
 
 The lossless invariant is a hard rule.
 For each side, the bucket counts must add up to the input component count.
@@ -52,7 +60,8 @@ The prototype evidence is in the "Why the diff is in Python" section of the tool
 
 ## Consequences
 
-- Every input component is visible in the output. A reader can audit the counts.
+- Every input component is visible in the output. A reader can audit the counts, and the report names the reason for each dropped component.
+- A Go repository without dependencies has no `golang` component after the module drop, except the `stdlib` package that Trivy lists. The tool still flags that repository as uncovered for `golang`.
 - A coverage claim rests on purl types, so a purl that Trivy or GitHub builds differently can look like a gap. The shared bucket exposes these cases.
 - Dropping qualifiers can merge two distinct packages into one entry. The occurrence count shows the merge.
 - The tool trusts the purl that each source emits. It does not look up the package in a registry.

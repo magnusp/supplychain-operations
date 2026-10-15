@@ -47,11 +47,11 @@ The JSON report has these top-level keys, in this order.
 
 - `repository` is the `owner/repo` string.
 - `run` holds every attempt with the SHA before and after, the drift flag, the drift warning, and the tool versions.
-- `accounting` holds the bucket counts for each side.
+- `accounting` holds the bucket counts for each side, with the dropped components split by reason.
 - `ecosystems` holds the summary for each purl type, with the `uncovered` flag.
 - `uncovered_ecosystems` lists the purl types that are uncovered.
 - `version_mismatches` lists the packages that both sides have with different versions.
-- `packages` holds the detail for every bucket.
+- `packages` holds the detail for every bucket. Each dropped component carries its reason.
 
 ## Pipeline
 
@@ -86,10 +86,12 @@ The tool puts every input component of each side in exactly one bucket.
 ```mermaid
 flowchart TD
     input[One input component of one side] --> root{Is it the root of the repository?}
-    root -- yes --> dropped[Dropped root]
+    root -- yes --> dropped[Dropped with the reason root]
     root -- no --> purl{Does it have a purl that parses?}
     purl -- no --> unkeyed[Unkeyed]
-    purl -- yes --> other{Does the other side have the same normalized purl?}
+    purl -- yes --> module{Is it the Go module of the repository?}
+    module -- yes --> moduleDropped[Dropped with the reason repository module]
+    module -- no --> other{Does the other side have the same normalized purl?}
     other -- yes --> shared[Shared]
     other -- no --> only[Trivy-only or GitHub-only]
 ```
@@ -98,15 +100,42 @@ flowchart TD
 - **Trivy-only:** Only Trivy has the normalized purl.
 - **GitHub-only:** Only GitHub has the normalized purl.
 - **Unkeyed:** The component has no purl, or the purl does not parse. The tool lists these components for each side and never compares them.
-- **Dropped root:** The component that describes the repository itself. Trivy puts it in `metadata.component`. GitHub lists it as `pkg:github/owner/repo`.
+- **Dropped:** A component that describes the repository itself. Each dropped component has a reason.
+  - **`root`:** The root of the BOM. Trivy puts it in `metadata.component`. GitHub lists it as `pkg:github/owner/repo`.
+  - **`repository_module`:** The Go module of the scanned repository. Trivy lists it as a component without a version. For example, `pkg:golang/github.com/owner/repo`.
 
 The tool keeps one entry for each normalized purl and counts the occurrences.
-The tool drops no component except the root.
+The tool drops no component except the two kinds above.
+A side can have more than one dropped component.
+
+### Repository module rule
+
+The tool drops a component as the `repository_module` only when both conditions hold.
+
+1. The purl type is `golang`.
+2. The normalized module path is `github.com/owner/repo`, optionally followed by a major-version suffix `/v2` or higher.
+
+The tool compares the owner and the repository name case-insensitively.
+The tool applies the rule to both sides, whatever the version of the purl.
+The tool does not match any other path, so `github.com/owner/repo/internal` stays in its bucket.
+
+The major-version suffix follows the real data.
+On `ulule/limiter`, Trivy lists the module as `pkg:golang/github.com/ulule/limiter/v3`.
+Go requires this suffix for module versions `v2` and higher, and forbids `/v1`.
+Without the suffix rule, the module of such a repository would stay visible as a trivy-only package.
 
 ### Lossless invariant
 
 For each side, the bucket counts must add up to the input component count.
 The report shows the sum in `accounting`.
+The summary on stderr prints one line for each side.
+For `magnusp/openbao-seal-spire`, the lines are these.
+
+```text
+github: 93 in = 81 shared + 11 only + 0 unkeyed + 1 dropped (1 root, 0 repository module)
+trivy: 85 in = 81 shared + 1 only + 1 unkeyed + 2 dropped (1 root, 1 repository module)
+```
+
 If the sum differs, the tool stops with exit code 2.
 The `Comparison` type checks this rule when the code creates it, so no code path can skip the check.
 
@@ -171,8 +200,7 @@ The Python diff keeps the invariant and produces the grouping by purl type, so i
 
 ## Known limits
 
-- Trivy reports the Go module of the repository as a component without a version. For example, `pkg:golang/github.com/magnusp/openbao-seal-spire` appears in the trivy-only bucket. The tool drops only the root of each side, so this component stays visible.
-- A repository with a Go module and no dependencies can look uncovered for `golang`. GitHub has no `golang` component in that case, and Trivy has the module itself.
+- Trivy with `--detection-priority comprehensive` also lists the Go `stdlib` package, for example `pkg:golang/stdlib@v1.24.0`. GitHub did not list it on any repository that the prototype checked. A Go repository with no dependencies has no other `golang` component on either side. The tool still flags `golang` as uncovered for such a repository.
 - Trivy lists a package once for each lockfile that names it. The occurrence count of the same purl can differ between the sides.
 - GitHub builds the SBOM from the default branch. The tool cannot pin the SBOM to a commit. The drift check only detects a branch that moves during the run.
 - The dependency graph of a repository can be disabled. For example, `magnusp/graceful-spring` answered with a 404 on 2026-10-15.
@@ -201,4 +229,4 @@ The default repository is `magnusp/openbao-seal-spire`.
 ## Possible follow-ups
 
 - Add a `renovate.json` coverage check. The check would compare the ecosystems that this tool finds with the managers that the `renovate.json` of the repository enables.
-- Treat the Go module that Trivy lists as a second root. This would remove the false `golang` gap for a module without dependencies.
+- Decide how to treat the Go `stdlib` package that Trivy lists. This would remove the false `golang` gap for a repository without dependencies.

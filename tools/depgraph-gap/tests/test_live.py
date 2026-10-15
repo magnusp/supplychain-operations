@@ -18,5 +18,7 @@ def test_runs_against_the_real_tools_and_accounts_for_every_component(
     captured = capsys.readouterr()
     assert code == 0, captured.err
     for side, counts in json.loads(captured.out)["accounting"].items():
-        accounted = counts["shared"] + counts["only"] + counts["unkeyed"] + counts["dropped_root"]
+        accounted = (
+            counts["shared"] + counts["only"] + counts["unkeyed"] + sum(counts["dropped"].values())
+        )
         assert accounted == counts["input"], side

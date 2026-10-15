@@ -18,9 +18,10 @@ def report_for(attempts: tuple[Attempt, ...]) -> dict:
         component("pkg:npm/foo@2", name="foo", version="2"),
         component("pkg:pypi/requests@2.0.0", name="requests", version="2.0.0"),
         component(None, name="poetry.lock", kind="application"),
+        component("pkg:golang/github.com/acme/widget", name="github.com/acme/widget"),
         root=component(None, name="https://github.com/acme/widget", kind="application"),
     )
-    return build_report(RunRecord(REPOSITORY, attempts, VERSIONS), compare(github, trivy))
+    return build_report(RunRecord(REPOSITORY, attempts, VERSIONS), compare(github, trivy, REPOSITORY))
 
 
 def test_the_report_leads_with_ecosystems_and_keeps_package_detail_underneath() -> None:
@@ -48,14 +49,33 @@ def test_the_report_leads_with_ecosystems_and_keeps_package_detail_underneath() 
     assert report["packages"]["unkeyed"]["trivy"] == [
         {"name": "poetry.lock", "version": None, "kind": "application", "purl": None}
     ]
-    assert report["packages"]["dropped_root"]["github"] == [
-        {
-            "name": "component",
-            "version": None,
-            "kind": "library",
-            "purl": "pkg:github/acme/widget@main",
-        }
-    ]
+    assert report["packages"]["dropped"] == {
+        "github": [
+            {
+                "reason": "root",
+                "name": "component",
+                "version": None,
+                "kind": "library",
+                "purl": "pkg:github/acme/widget@main",
+            }
+        ],
+        "trivy": [
+            {
+                "reason": "root",
+                "name": "https://github.com/acme/widget",
+                "version": None,
+                "kind": "application",
+                "purl": None,
+            },
+            {
+                "reason": "repository_module",
+                "name": "github.com/acme/widget",
+                "version": None,
+                "kind": "library",
+                "purl": "pkg:golang/github.com/acme/widget",
+            },
+        ],
+    }
 
 
 def test_the_report_records_shas_tool_versions_and_per_side_counts() -> None:
@@ -72,8 +92,20 @@ def test_the_report_records_shas_tool_versions_and_per_side_counts() -> None:
         },
     }
     assert report["accounting"] == {
-        "github": {"input": 3, "shared": 1, "only": 1, "unkeyed": 0, "dropped_root": 1},
-        "trivy": {"input": 5, "shared": 1, "only": 2, "unkeyed": 1, "dropped_root": 1},
+        "github": {
+            "input": 3,
+            "shared": 1,
+            "only": 1,
+            "unkeyed": 0,
+            "dropped": {"root": 1, "repository_module": 0},
+        },
+        "trivy": {
+            "input": 6,
+            "shared": 1,
+            "only": 2,
+            "unkeyed": 1,
+            "dropped": {"root": 1, "repository_module": 1},
+        },
     }
 
 
@@ -103,7 +135,7 @@ def test_the_summary_flags_uncovered_ecosystems_and_shows_the_accounting() -> No
             "uncovered ecosystems: pypi",
             "version mismatches: 1",
             "accounting per side (components in = components placed in a bucket):",
-            "  github: 3 in = 1 shared + 1 only + 0 unkeyed + 1 dropped root",
-            "  trivy: 5 in = 1 shared + 2 only + 1 unkeyed + 1 dropped root",
+            "  github: 3 in = 1 shared + 1 only + 0 unkeyed + 1 dropped (1 root, 0 repository module)",
+            "  trivy: 6 in = 1 shared + 2 only + 1 unkeyed + 2 dropped (1 root, 1 repository module)",
         ]
     )
