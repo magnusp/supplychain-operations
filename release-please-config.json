@@ -9,7 +9,7 @@
         {
           "type": "toml",
           "path": "uv.lock",
-          "jsonpath": "$.package[?(@.name=='depgraph-gap')].version"
+          "jsonpath": "$.package[?(@.name.value=='depgraph-gap')].version"
         }
       ]
     }
