@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "python",
+  "include-component-in-tag": true,
+  "packages": {
+    "tools/depgraph-gap": {
+      "component": "depgraph-gap",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name=='depgraph-gap')].version"
+        }
+      ]
+    }
+  }
+}
