@@ -20,3 +20,4 @@ Read `README.md` for the layout and `docs/adr/` for the reasons behind it.
 - Pin every GitHub Action to a commit SHA with the version in a trailing comment. Renovate updates both.
 - Pin external binaries in `mise.toml` and in the tool's `Dockerfile`. Keep the two in step.
 - Mark a `Dockerfile` `ARG` version with a `# renovate:` comment so Renovate tracks it.
+- When you change `GH_VERSION` or `CYCLONEDX_VERSION`, update the `*_SHA256_*` arguments next to it. The build fails on a mismatch.

@@ -7,6 +7,10 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
@@ -35,9 +39,11 @@ jobs:
         with:
           persist-credentials: false
       - id: tool
+        env:
+          TOOL_PATH: ${{ matrix.path }}
         run: |
-          echo "name=$(basename "${{ matrix.path }}")" >> "$GITHUB_OUTPUT"
-          echo "version=$(sed -n 's/^version = "\(.*\)"/\1/p' "${{ matrix.path }}/pyproject.toml")" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$TOOL_PATH")" >> "$GITHUB_OUTPUT"
+          echo "version=$(sed -n 's/^version = "\(.*\)"/\1/p' "$TOOL_PATH/pyproject.toml")" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
