@@ -44,3 +44,4 @@ jobs:
         with:
           install_args: python uv
       - run: uv run pytest
+      - run: docker build .
