@@ -12,7 +12,7 @@ RUN uv sync --locked --no-dev --no-editable
 FROM python:3.15.0-slim@sha256:2da676046630d7bf14c6764ae1143dc7fa0377a53f94bf5a642f0b214aca5bce
 ARG TARGETARCH
 # renovate: datasource=github-releases depName=cli/cli
-ARG GH_VERSION=2.102.0
+ARG GH_VERSION=2.103.2
 ARG GH_SHA256_AMD64=bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386
 ARG GH_SHA256_ARM64=7862c86c72f43df3a2d93ddde6f473285b4e2af61b494849846827e513ef6484
 # renovate: datasource=github-releases depName=CycloneDX/cyclonedx-cli
